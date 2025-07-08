@@ -1,0 +1,187 @@
+service: smart-devices
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: ${self:custom.runtime.${self:provider.stage}, 'provided.al2'}
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+
+  environment:
+    DYNAMODB_TABLE: ${self:service}-${self:provider.stage}-devices
+    SQS_QUEUE_URL: ${cf:${self:service}-${self:provider.stage}.DeviceNotificationQueue, 'http://localhost:4566/000000000000/fake-queue'}
+    DYNAMODB_URL: ${self:custom.dynamodbUrl.${self:provider.stage}, ''}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - !GetAtt DevicesTable.Arn
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource:
+            - !GetAtt DeviceNotificationQueue.Arn
+
+custom:
+  dynamodbUrl:
+    dev: http://localhost:8000
+  runtime:
+    dev: go1.x        # local development runtime
+    prod: provided.al2  # production runtime
+  handler:
+    dev:
+      create-device: cmd/create-device/main.go
+      get-device: cmd/get-device/main.go
+      list-devices: cmd/list-devices/main.go
+      update-device: cmd/update-device/main.go
+      delete-device: cmd/delete-device/main.go
+      sqs-listener: cmd/sqs-listener/main.go
+    prod:
+      create-device: bootstrap
+      get-device: bootstrap
+      list-devices: bootstrap
+      update-device: bootstrap
+      delete-device: bootstrap
+      sqs-listener: bootstrap
+
+
+
+functions:
+  get-device:
+    handler: ${self:custom.handler.${self:provider.stage}.get-device}
+    package:
+      individually: true
+      artifact: build/get-device.zip
+#      patterns:
+#        - '!./**'
+#        - './bin/get-device/**'
+    events:
+      - http:
+          path: /devices/{id}
+          method: get
+          cors: true
+  list-devices:
+    handler: ${self:custom.handler.${self:provider.stage}.list-devices}
+    package:
+      individually: true
+      artifact: build/list-devices.zip
+#      patterns:
+#        - '!./**'
+#        - './bin/list-devices/**'
+    events:
+      - http:
+          path: /devices
+          method: get
+          cors: true
+  create-device:
+    handler: ${self:custom.handler.${self:provider.stage}.create-device}
+    package:
+      individually: true
+      artifact: build/create-device.zip
+#      patterns:
+#        - '!./**'
+#        - './bin/create-device/**'
+    events:
+      - http:
+          path: /devices
+          method: post
+          cors: true
+  update-device:
+    handler: ${self:custom.handler.${self:provider.stage}.update-device}
+    package:
+      individually: true
+      artifact: build/update-device.zip
+#      patterns:
+#        - '!./**'
+#        - './bin/update-device/**'
+    events:
+      - http:
+          path: /devices/{id}
+          method: put
+          cors: true
+  delete-device:
+    handler: ${self:custom.handler.${self:provider.stage}.delete-device}
+    package:
+      individually: true
+      artifact: build/delete-device.zip
+#      patterns:
+#        - '!./**'
+#        - './bin/delete-device/**'
+    events:
+      - http:
+          path: /devices/{id}
+          method: delete
+          cors: true
+  sqs-listener:
+    handler: ${self:custom.handler.${self:provider.stage}.sqs-listener}
+    package:
+      individually: true
+      artifact: build/sqs-listener.zip
+#      patterns:
+#        - '!./**'
+#        - './bin/sqs-listener/**'
+    events:
+      - sqs:
+          arn: !GetAtt DeviceNotificationQueue.Arn
+          batchSize: 10
+          maximumBatchingWindow: 5
+
+resources:
+    Resources:
+      DevicesTable:
+        Type: AWS::DynamoDB::Table
+        Properties:
+          TableName: ${self:provider.environment.DYNAMODB_TABLE}
+          AttributeDefinitions:
+            - AttributeName: id
+              AttributeType: S
+          KeySchema:
+            - AttributeName: id
+              KeyType: HASH
+          BillingMode: PAY_PER_REQUEST
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: true
+          SSESpecification:
+            SSEEnabled: true
+
+      DeviceNotificationQueue:
+        Type: AWS::SQS::Queue
+        Properties:
+          QueueName: ${self:service}-${self:provider.stage}-device-notifications
+          MessageRetentionPeriod: 1209600 # 14 days
+          VisibilityTimeout: 60
+          RedrivePolicy:
+            deadLetterTargetArn: !GetAtt DeviceNotificationDLQ.Arn
+            maxReceiveCount: 3
+
+      DeviceNotificationDLQ:
+        Type: AWS::SQS::Queue
+        Properties:
+          QueueName: ${self:service}-${self:provider.stage}-device-notifications-dlq
+          MessageRetentionPeriod: 1209600 # 14 days
+
+    Outputs:
+      DevicesTableName:
+        Description: Name of the DynamoDB table
+        Value: !Ref DevicesTable
+      SQSQueueURL:
+        Description: URL of the SQS queue
+        Value: !Ref DeviceNotificationQueue
+      ApiGatewayRestApiId:
+        Description: API Gateway REST API ID
+        Value: !Ref ApiGatewayRestApi
+
+plugins:
+  - serverless-offline
