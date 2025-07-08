@@ -22,7 +22,7 @@ func NewMockDeviceRepository() *MockDeviceRepository {
 	}
 }
 
-func (m *MockDeviceRepository) GetDevice(ctx context.Context, id string) (*models.Device, error) {
+func (m *MockDeviceRepository) GetDevice(_ context.Context, id string) (*models.Device, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -33,7 +33,7 @@ func (m *MockDeviceRepository) GetDevice(ctx context.Context, id string) (*model
 	return device, nil
 }
 
-func (m *MockDeviceRepository) GetDevices(ctx context.Context) ([]models.Device, error) {
+func (m *MockDeviceRepository) GetDevices(_ context.Context) ([]models.Device, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -44,7 +44,7 @@ func (m *MockDeviceRepository) GetDevices(ctx context.Context) ([]models.Device,
 	return devices, nil
 }
 
-func (m *MockDeviceRepository) CreateDevice(ctx context.Context, device models.Device) (models.Device, error) {
+func (m *MockDeviceRepository) CreateDevice(_ context.Context, device models.Device) (models.Device, error) {
 	if m.err != nil {
 		return device, m.err
 	}
@@ -55,7 +55,7 @@ func (m *MockDeviceRepository) CreateDevice(ctx context.Context, device models.D
 	return device, nil
 }
 
-func (m *MockDeviceRepository) UpdateDevice(ctx context.Context, id string, device models.Device) (*models.Device, error) {
+func (m *MockDeviceRepository) UpdateDevice(_ context.Context, id string, device models.Device) (*models.Device, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -84,7 +84,7 @@ func (m *MockDeviceRepository) UpdateDevice(ctx context.Context, id string, devi
 	return existing, nil
 }
 
-func (m *MockDeviceRepository) DeleteDevice(ctx context.Context, id string) error {
+func (m *MockDeviceRepository) DeleteDevice(_ context.Context, id string) error {
 	if m.err != nil {
 		return m.err
 	}
@@ -96,7 +96,7 @@ func (m *MockDeviceRepository) DeleteDevice(ctx context.Context, id string) erro
 	return nil
 }
 
-func (m *MockDeviceRepository) UpdateDeviceHomeID(ctx context.Context, id string, homeID string) error {
+func (m *MockDeviceRepository) UpdateDeviceHomeID(_ context.Context, id string, homeID string) error {
 	if m.err != nil {
 		return m.err
 	}

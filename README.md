@@ -79,7 +79,7 @@ Develop a serverless application using AWS Lambda and DynamoDB to manage smart h
 ## 📋 Data Models
 
 ### Device Model
-```go
+```
 type Device struct {
     ID         string `json:"id"`         // Unique identifier (Primary Key)
     MAC        string `json:"mac"`        // MAC address of the device
@@ -92,7 +92,7 @@ type Device struct {
 ```
 
 ### SQS Message Model
-```go
+```
 type SQSMessage struct {
     DeviceID string `json:"deviceId"`    // Device to update
     HomeID   string `json:"homeId"`      // New home association
@@ -101,7 +101,7 @@ type SQSMessage struct {
 ```
 
 ### Request Models
-```go
+```
 type CreateDeviceRequest struct {
     MAC    string `json:"mac" validate:"required,mac"`
     Name   string `json:"name" validate:"required,min=1,max=100"`

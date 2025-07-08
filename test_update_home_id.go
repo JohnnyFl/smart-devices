@@ -20,14 +20,24 @@ import (
 // Simple test to verify UpdateDeviceHomeID updates both homeId and modifiedAt
 func main() {
 	logger, _ := zap.NewDevelopment()
-	defer logger.Sync()
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			log.Printf("Failed to sync logger: %v", err)
+		}
+	}()
 
 	// Set environment variables for local DynamoDB
-	os.Setenv("IS_LOCAL", "true")
-	os.Setenv("DYNAMODB_ENDPOINT", "http://localhost:8000")
+	if err := os.Setenv("IS_LOCAL", "true"); err != nil {
+		log.Printf("Failed to set IS_LOCAL: %v", err)
+	}
+	if err := os.Setenv("DYNAMODB_ENDPOINT", "http://localhost:8000"); err != nil {
+		log.Printf("Failed to set DYNAMODB_ENDPOINT: %v", err)
+	}
 
 	// Set AWS region (required even for local)
-	os.Setenv("AWS_REGION", "us-east-1")
+	if err := os.Setenv("AWS_REGION", "us-east-1"); err != nil {
+		log.Printf("Failed to set AWS_REGION: %v", err)
+	}
 
 	// Load AWS config
 	cfg, err := config.LoadDefaultConfig(context.TODO(),

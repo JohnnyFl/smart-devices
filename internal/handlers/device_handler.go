@@ -48,7 +48,7 @@ func (h *DeviceHandler) GetDevice(ctx context.Context, request events.APIGateway
 
 }
 
-func (h *DeviceHandler) GetDevices(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (h *DeviceHandler) GetDevices(ctx context.Context) (events.APIGatewayProxyResponse, error) {
 	devices, err := h.svc.GetDevices(ctx)
 	if err != nil {
 		h.logger.Warn("device retrieval failed",
