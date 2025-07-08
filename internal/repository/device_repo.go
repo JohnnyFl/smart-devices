@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"example.com/smart-devices/internal/errors"
 	"example.com/smart-devices/internal/models"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -48,11 +49,18 @@ func (r *DeviceRepository) GetDevice(ctx context.Context, id string) (*models.De
 			zap.String("table", r.tableName),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to get device: %w", err)
+		return nil, errors.WrapError(errors.ErrorTypeDatabase, "failed to get device from database", err).
+			WithOperation("GetDevice").
+			WithLayer("repository").
+			WithContext("device_id", id).
+			WithContext("table", r.tableName)
 	}
 
 	if result.Item == nil {
-		return nil, fmt.Errorf("device not found")
+		return nil, errors.ErrDomainDeviceNotFound.
+			WithOperation("GetDevice").
+			WithLayer("repository").
+			WithContext("device_id", id)
 	}
 
 	var device models.Device
@@ -62,22 +70,21 @@ func (r *DeviceRepository) GetDevice(ctx context.Context, id string) (*models.De
 			zap.String("device_id", id),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to unmarshal device: %w", err)
+		return nil, errors.WrapError(errors.ErrorTypeDatabase, "failed to unmarshal device data", err).
+			WithOperation("GetDevice").
+			WithLayer("repository").
+			WithContext("device_id", id)
 	}
 
 	return &device, nil
-
 }
 
 func (r *DeviceRepository) GetDevices(ctx context.Context) ([]models.Device, error) {
-	r.logger.Debug("fetching device")
+	r.logger.Debug("fetching devices")
 
 	result, err := r.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName: &r.tableName,
 	})
-
-	r.logger.Debug("fetching device",
-		zap.Any("count", result))
 
 	if err != nil {
 		r.logger.Error("database operation failed",
@@ -85,28 +92,43 @@ func (r *DeviceRepository) GetDevices(ctx context.Context) ([]models.Device, err
 			zap.String("table", r.tableName),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to get devices: %w", err)
+		return nil, errors.WrapError(errors.ErrorTypeDatabase, "failed to scan devices from database", err).
+			WithOperation("GetDevices").
+			WithLayer("repository").
+			WithContext("table", r.tableName)
 	}
 
+	r.logger.Debug("fetched devices", zap.Int32("count", result.Count))
+
 	if result.Count == 0 {
-		return nil, fmt.Errorf("no devices found")
+		return nil, errors.ErrDomainNoDevicesFound.
+			WithOperation("GetDevices").
+			WithLayer("repository")
 	}
 
 	var devices []models.Device
 
-	for _, item := range result.Items {
+	for i, item := range result.Items {
 		var device models.Device
-		err := attributevalue.UnmarshalMap(item, &device)
-		if err != nil {
+		if err := attributevalue.UnmarshalMap(item, &device); err != nil {
 			r.logger.Error("failed to unmarshal device",
+				zap.Int("item_index", i),
 				zap.Error(err))
-
+			// Skip malformed items but continue processing
+			continue
 		}
 		devices = append(devices, device)
 	}
 
-	return devices, nil
+	// If no devices were successfully unmarshaled
+	if len(devices) == 0 && len(result.Items) > 0 {
+		return nil, errors.ErrUnmarshalDevice.
+			WithOperation("GetDevices").
+			WithLayer("repository").
+			WithContext("items_count", len(result.Items))
+	}
 
+	return devices, nil
 }
 
 func (r *DeviceRepository) DeleteDevice(ctx context.Context, id string) error {
@@ -127,11 +149,14 @@ func (r *DeviceRepository) DeleteDevice(ctx context.Context, id string) error {
 			zap.String("table", r.tableName),
 			zap.Error(err),
 		)
-		return fmt.Errorf("failed to delete device: %w", err)
+		return errors.WrapError(errors.ErrorTypeDatabase, "failed to delete device from database", err).
+			WithOperation("DeleteDevice").
+			WithLayer("repository").
+			WithContext("device_id", id).
+			WithContext("table", r.tableName)
 	}
 
 	return nil
-
 }
 
 func (r *DeviceRepository) UpdateDevice(ctx context.Context, id string, update models.Device) (*models.Device, error) {
@@ -149,10 +174,16 @@ func (r *DeviceRepository) UpdateDevice(ctx context.Context, id string, update m
 			zap.String("device_id", id),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to get device: %w", err)
+		return nil, errors.WrapError(errors.ErrorTypeDatabase, "failed to get device for update", err).
+			WithOperation("UpdateDevice").
+			WithLayer("repository").
+			WithContext("device_id", id)
 	}
 	if result.Item == nil {
-		return nil, fmt.Errorf("device not found")
+		return nil, errors.ErrDomainDeviceNotFound.
+			WithOperation("UpdateDevice").
+			WithLayer("repository").
+			WithContext("device_id", id)
 	}
 
 	// Unmarshal the current device
@@ -162,7 +193,10 @@ func (r *DeviceRepository) UpdateDevice(ctx context.Context, id string, update m
 			zap.String("device_id", id),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to unmarshal current device: %w", err)
+		return nil, errors.WrapError(errors.ErrorTypeDatabase, "failed to unmarshal current device", err).
+			WithOperation("UpdateDevice").
+			WithLayer("repository").
+			WithContext("device_id", id)
 	}
 
 	// Create a map of fields to update
@@ -216,7 +250,10 @@ func (r *DeviceRepository) UpdateDevice(ctx context.Context, id string, update m
 			zap.String("device_id", id),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to update device: %w", err)
+		return nil, errors.WrapError(errors.ErrorTypeDatabase, "failed to update device in database", err).
+			WithOperation("UpdateDevice").
+			WithLayer("repository").
+			WithContext("device_id", id)
 	}
 
 	// Get the updated device
@@ -232,7 +269,10 @@ func (r *DeviceRepository) UpdateDevice(ctx context.Context, id string, update m
 			zap.String("device_id", id),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to fetch updated device: %w", err)
+		return nil, errors.WrapError(errors.ErrorTypeDatabase, "failed to fetch updated device", err).
+			WithOperation("UpdateDevice").
+			WithLayer("repository").
+			WithContext("device_id", id)
 	}
 
 	var updatedDevice models.Device
@@ -241,23 +281,29 @@ func (r *DeviceRepository) UpdateDevice(ctx context.Context, id string, update m
 			zap.String("device_id", id),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to unmarshal updated device: %w", err)
+		return nil, errors.WrapError(errors.ErrorTypeDatabase, "failed to unmarshal updated device", err).
+			WithOperation("UpdateDevice").
+			WithLayer("repository").
+			WithContext("device_id", id)
 	}
 
 	return &updatedDevice, nil
 }
 
 func (r *DeviceRepository) CreateDevice(ctx context.Context, device models.Device) (models.Device, error) {
-	r.logger.Debug("creating device", zap.String("device_id", device.ID))
-
 	now := time.Now().UnixMilli()
 	device.ID = uuid.New().String()
 	device.CreatedAt = now
 	device.ModifiedAt = now
 
+	r.logger.Debug("creating device", zap.String("device_id", device.ID))
+
 	item, err := attributevalue.MarshalMap(device)
 	if err != nil {
-		return device, fmt.Errorf("failed to marshal device: %w", err)
+		return device, errors.WrapError(errors.ErrorTypeDatabase, "failed to marshal device data", err).
+			WithOperation("CreateDevice").
+			WithLayer("repository").
+			WithContext("device_id", device.ID)
 	}
 
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
@@ -269,13 +315,17 @@ func (r *DeviceRepository) CreateDevice(ctx context.Context, device models.Devic
 		r.logger.Error("database operation failed",
 			zap.String("operation", "CreateDevice"),
 			zap.String("table", r.tableName),
+			zap.String("device_id", device.ID),
 			zap.Error(err),
 		)
-		return device, fmt.Errorf("failed to get device: %w", err)
+		return device, errors.WrapError(errors.ErrorTypeDatabase, "failed to create device in database", err).
+			WithOperation("CreateDevice").
+			WithLayer("repository").
+			WithContext("device_id", device.ID).
+			WithContext("table", r.tableName)
 	}
 
 	return device, nil
-
 }
 
 func (r *DeviceRepository) UpdateDeviceHomeID(ctx context.Context, id string, homeID string) error {
@@ -301,12 +351,16 @@ func (r *DeviceRepository) UpdateDeviceHomeID(ctx context.Context, id string, ho
 	})
 
 	if err != nil {
-		r.logger.Error("failed to update device",
+		r.logger.Error("failed to update device home ID",
 			zap.String("device_id", id),
 			zap.String("home_id", homeID),
 			zap.Error(err),
 		)
-		return fmt.Errorf("failed to update device: %w", err)
+		return errors.WrapError(errors.ErrorTypeDatabase, "failed to update device home ID", err).
+			WithOperation("UpdateDeviceHomeID").
+			WithLayer("repository").
+			WithContext("device_id", id).
+			WithContext("home_id", homeID)
 	}
 
 	return nil
