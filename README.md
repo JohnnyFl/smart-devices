@@ -69,10 +69,12 @@ Develop a serverless application using AWS Lambda and DynamoDB to manage smart h
 
 ### Technical Features
 - **Serverless Architecture**: AWS Lambda functions with API Gateway
-- **Local Development**: Docker Compose setup with DynamoDB Local + Serverless Offline
+- **Local Development**: DynamoDB Local + Serverless Offline
 - **Structured Logging**: Comprehensive logging with Zap logger
-- **Input Validation**: MAC address, UUID, and device type validation
-- **Error Handling**: Proper HTTP status codes and error responses
+- **Enhanced Error Handling**: Domain-specific errors with context and proper wrapping
+- **Comprehensive Input Validation**: MAC address, UUID, device type, and field validation
+- **Standardized API Responses**: Consistent error codes and success responses
+- **Modular Architecture**: Clean separation with setup utilities and validation layer
 - **Security**: IAM roles with least-privilege access
 - **Performance**: Optimized DynamoDB operations with proper indexing
 
@@ -120,7 +122,7 @@ type UpdateDeviceRequest struct {
 
 - **Go 1.24+**
 - **Node.js & npm** (for Serverless Framework)
-- **Docker & Docker Compose** (for local development)
+- **Docker** (for DynamoDB Local)
 - **AWS CLI** (for deployment)
 - **Serverless Framework**
 
@@ -371,13 +373,13 @@ npm run clean
 ### Manual Build Commands
 
 ```bash
-# Build individual functions
-GOOS=linux GOARCH=amd64 go build -o bin/get-device cmd/get-device/main.go
-GOOS=linux GOARCH=amd64 go build -o bin/create-device cmd/create-device/main.go
-GOOS=linux GOARCH=amd64 go build -o bin/update-device cmd/update-device/main.go
-GOOS=linux GOARCH=amd64 go build -o bin/delete-device cmd/delete-device/main.go
-GOOS=linux GOARCH=amd64 go build -o bin/list-devices cmd/list-devices/main.go
-GOOS=linux GOARCH=amd64 go build -o bin/sqs-listener cmd/sqs-listener/main.go
+# Build individual functions (outputs to build/{function}/bootstrap)
+GOOS=linux GOARCH=amd64 go build -o build/get-device/bootstrap cmd/get-device/main.go
+GOOS=linux GOARCH=amd64 go build -o build/create-device/bootstrap cmd/create-device/main.go
+GOOS=linux GOARCH=amd64 go build -o build/update-device/bootstrap cmd/update-device/main.go
+GOOS=linux GOARCH=amd64 go build -o build/delete-device/bootstrap cmd/delete-device/main.go
+GOOS=linux GOARCH=amd64 go build -o build/list-devices/bootstrap cmd/list-devices/main.go
+GOOS=linux GOARCH=amd64 go build -o build/sqs-listener/bootstrap cmd/sqs-listener/main.go
 ```
 
 ## 🚀 Deployment
@@ -424,22 +426,28 @@ The deployment creates:
 ```
 smart-devices/
 ├── cmd/                    # Lambda function entry points
-│   ├── create-device/
-│   ├── get-device/
-│   ├── list-devices/
-│   ├── update-device/
-│   ├── delete-device/
-│   └── sqs-listener/
+│   ├── create-device/      # POST /devices
+│   ├── get-device/         # GET /devices/{id}
+│   ├── list-devices/       # GET /devices
+│   ├── update-device/      # PUT /devices/{id}
+│   ├── delete-device/      # DELETE /devices/{id}
+│   └── sqs-listener/       # SQS event processor
 ├── internal/
 │   ├── config/            # Configuration management
-│   ├── handlers/          # HTTP/SQS handlers
-│   ├── models/            # Data models
-│   ├── repository/        # Data access layer
-│   └── services/          # Business logic
-├── utils/                 # Utility functions
-├── docker-compose.yml     # Local development setup
-├── serverless.yml         # Serverless configuration
-└── go.mod                # Go dependencies
+│   ├── errors/            # Error handling and domain errors
+│   │   ├── api_errors.go  # HTTP API error definitions
+│   │   └── domain_errors.go # Domain-specific error types
+│   ├── handlers/          # HTTP/SQS request handlers
+│   ├── models/            # Data models and request/response types
+│   ├── repository/        # Data access layer (DynamoDB)
+│   ├── services/          # Business logic layer
+│   ├── setup/             # Shared initialization utilities
+│   └── validation/        # Input validation layer
+├── build/                 # Build artifacts (generated)
+├── serverless.yml         # Serverless Framework configuration
+├── package.json          # npm scripts and dependencies
+├── CLAUDE.md             # Claude Code assistant documentation
+└── go.mod                # Go module dependencies
 ```
 
 ## 🔧 Configuration
@@ -460,6 +468,29 @@ smart-devices/
 - **Name**: 1-100 characters
 - **Type**: Must be one of: `thermostat`, `light`, `camera`, `sensor`
 - **HomeID**: Must be valid UUID format
+
+### Enhanced Error Handling
+
+The system implements a comprehensive error handling strategy with domain-specific errors:
+
+#### Error Types
+- **Validation Errors** (400): Invalid input data, missing fields, format errors
+- **Not Found Errors** (404): Resource not found, empty collections
+- **Database Errors** (500): DynamoDB operation failures, marshaling errors
+- **Internal Errors** (500): Unexpected system errors
+
+#### Error Response Format
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "Device name must be between 1 and 100 characters"
+}
+```
+
+#### Error Context & Logging
+- **Structured Logging**: All errors include operation context, layer information, and relevant IDs
+- **Error Wrapping**: Errors maintain their original context while adding layer-specific information
+- **Request Tracing**: Each error can be traced through repository → service → handler layers
 
 ## 🔍 Monitoring & Logging
 
